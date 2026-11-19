@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.gitignore
+.pgdata
+uploads/*
+!uploads/seed
+!uploads/seed/**
+*.log
+.env
+.env.local
+coverage
+README.md
+tests
+build.log
