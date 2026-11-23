@@ -10,6 +10,7 @@ Application web progressive (PWA) bilingue **arabe (RTL) / français (LTR)** pou
 
 - [Fonctionnalités](#fonctionnalités)
 - [Partage avec consentement](#partage-avec-consentement)
+- [Consultation assistée par IA](#consultation-assistée-par-ia)
 - [Stack](#stack)
 - [Démarrage rapide](#démarrage-rapide)
 - [Comptes de démonstration](#comptes-de-démonstration)
@@ -39,8 +40,8 @@ Application web progressive (PWA) bilingue **arabe (RTL) / français (LTR)** pou
 
 ### Médecin
 
-- Tableau de bord : consultations du jour, brouillons, consultations prêtes à lier, liaisons du mois, listes d’actions.
-- Création de consultation en 4 étapes (motif/examen/traitement/révision) avec **sauvegarde automatique** (debounce 1,4 s + intervalle de 15 s), ordonnance multi-lignes et pièces jointes (PDF/JPG/PNG, 10 Mo, 5 fichiers).
+- Tableau de bord : consultations du jour, brouillons, **brouillons IA à relire**, consultations prêtes à lier, liaisons du mois, listes d’actions.
+- Création de consultation : **choix du mode** — saisie manuelle en 4 étapes (motif/examen/traitement/révision) avec **sauvegarde automatique** (debounce 1,4 s + intervalle de 15 s), ou **consultation assistée par IA** (enregistrement audio → transcription → brouillon relu et validé par le médecin). Ordonnance multi-lignes et pièces jointes (PDF/JPG/PNG, 10 Mo, 5 fichiers).
 - Liste de ses consultations avec recherche, filtres par statut et pagination.
 - Fiche de consultation en lecture seule après liaison, impression.
 - **Liaison** en fin de consultation :
@@ -82,6 +83,55 @@ Règles :
 
 ---
 
+## Consultation assistée par IA
+
+Le médecin enregistre la consultation ; l’IA **transcrit** puis **prépare un brouillon** ; le médecin **relit, corrige et valide seul**. L’IA ne valide jamais et n’invente jamais : un champ absent de l’échange reste vide (« À compléter »).
+
+### Parcours
+
+1. **Nouvelle consultation → mode IA** : consentement obligatoire avant tout enregistrement — 3 cases (enregistrement audio, traitement IA, conservation de l’audio *facultative*). Le bouton de démarrage reste inactif tant que les deux accords obligatoires ne sont pas cochés. « Le patient refuse » bascule en saisie manuelle.
+2. **Enregistrement** : démarrage/pause/reprise/fin, indicateur REC, durée, vumètre, verrouillage d’écran (wake lock), avertissement de silence > 15 s, durée maximale (`MAX_AUDIO_MINUTES`), envoi par **segments de 10 s** idempotents avec reprise après coupure (IndexedDB + re-upload), avertissement `beforeunload`.
+3. **Téléphone comme micro** : QR / code d’appairage valable **10 minutes**, usage unique ; le téléphone enregistre et envoie, l’écran du médecin attend puis suit le traitement.
+4. **Traitement** : assemblage de l’audio → `READY` → file de jobs (`TRANSCRIBE` puis `EXTRACT`, 3 tentatives avec backoff) → statut `AI_REVIEW` + notification. En cas d’échec : relancer, voir la transcription brute, ou continuer manuellement.
+5. **Relecture** (`/doctor/consultations/[id]/review`) : deux colonnes — transcription (segments cliquables, lecture audio, sources) et brouillon éditable avec badges 🟣 IA / ✏️ Modifié / 🟠 À compléter / ⚠️ À vérifier, régénération par section (10/h), **confirmation explicite de chaque prescription**, case « j’ai relu et vérifié ». La validation serveur refuse un brouillon incomplet ou non relu.
+6. **Validation** → statut `COMPLETED`, `validatedAt`, `aiMeta.editedFields`, audit, suppression de l’audio immédiate si la rétention n’a pas été acceptée (sinon expiration à 7 jours) → écran de liaison QR/code **inchangé**.
+
+### Garde-fous d’extraction
+
+- Diagnostic, traitement et prescriptions uniquement s’ils ont été **dits explicitement par le médecin** (preuve = segments de transcription).
+- Un médicament **cité par le patient** n’est jamais prescrit (rejet + avertissement).
+- Une **négation** (« pas de toux », « ما كايناش السخانة ») ne devient jamais un symptôme.
+- Toute valeur sans preuve exploitable est signalée « À vérifier » ; le LLM doit répondre en JSON validé par zod.
+- Fournisseurs derrière interfaces : `STT_PROVIDER=mock|ai-service|openai`, `LLM_PROVIDER=mock|openai|anthropic|ollama`. Les modes `mock` fonctionnent hors ligne (démo).
+
+### File de traitement
+
+- Sans `REDIS_URL` : file **PostgreSQL** (`ProcessingJob`) exécutée inline par l’application (`INLINE_JOBS=1`, défaut) — aucun Redis requis.
+- Avec Redis : notifications **BullMQ** + worker dédié (`npm run worker`, service `worker` du profil Docker `ai`). Les jobs restent claimés atomiquement en base (pas de double traitement).
+- Purge planifiée (`PURGE` + `npm run worker` ou cron `/api/cron/purge`) : audio expiré supprimé (`AUDIO_DELETED`), transcriptions purgées après `TRANSCRIPT_RETENTION_DAYS` pour les consultations validées.
+
+### Confidentialité IA
+
+- Consentement horodaté et audité (`CONSENT_GIVEN`, `CONSENT_PATIENT_REFUSED`).
+- Audio conservé côté serveur, jamais accessible au patient ; un médecin tiers — même avec un grant — ne peut ni lire ni écouter la transcription d’un autre médecin.
+- Lecture audio journalisée (`AUDIO_PLAYED`), suppression manuelle possible (« supprimer l’audio »), suppression automatique à l’expiration (`AUDIO_RETENTION_DAYS=7`).
+- Minimisation : aucun nom/identifiant patient dans les prompts ; étiquette « Généré par IA, vérifié par le médecin » sur les consultations issues de l’IA.
+- **Avant tout usage réel : validation CNDP / loi 09-08** (voir plus bas).
+
+### Évaluation hors ligne
+
+```bash
+npm run eval
+```
+
+14 consultations fictives (français, arabe, darija/français) dans `eval/cases.json` avec le résultat attendu. Le rapport vérifie : **0 champ inventé**, pièges de négation, médicaments patient rejetés, détection de langue, temps de traitement, plus des garde-fous post-LLM sur une sortie volontairement corrompue.
+
+### Démonstration sans micro
+
+Le seed crée **2 consultations `AI_REVIEW`** (transcription FR + darija, brouillon, consentement, audio de démonstration) : connectez-vous comme `dr.alami@demo.ma` → tableau de bord → « À relire et valider ».
+
+---
+
 ## Stack
 
 | Domaine | Choix |
@@ -109,6 +159,14 @@ docker compose exec app npm run db:seed
 ```
 
 L’application est disponible sur <http://localhost:3000>. PostgreSQL est exposé sur le port `5433` de l’hôte.
+
+Profil IA optionnel (Redis + worker + service de transcription) :
+
+```bash
+docker compose --profile ai up --build -d
+# avec un worker dédié, désactiver l'exécution inline côté app :
+# INLINE_JOBS=0 docker compose --profile ai up -d
+```
 
 Sans Docker, lancez uniquement la base :
 
@@ -232,6 +290,15 @@ Pour recréer les données : `npm run db:seed` (le script est idempotent et reme
 2. Remplissez et terminez la consultation.
 3. Sur l’écran de fin, la carte **« Ajouter au dossier de … »** (portée indiquée) lie la consultation en un clic — la note de bas de page passe à « accès actif ».
 
+### 8. Médecin : consultation assistée par IA (sans micro)
+
+1. Connexion avec `dr.alami@demo.ma` → le tableau de bord affiche **« À relire et valider »** (2 consultations seedées : FR et darija).
+2. Ouvrez une relecture : transcription à gauche (segments cliquables, audio de démo), brouillon à droite avec badges 🟣/✏️/🟠/⚠️.
+3. Modifiez un champ (badge ✏️), cliquez **Source** pour surligner le segment, **Régénérer** une section, ajoutez/confirmé une prescription.
+4. Cochez « j’ai relu et vérifié » → **Valider** : la consultation passe `COMPLETED` et l’écran de liaison QR/code s’ouvre (parcours 1).
+5. Avec un micro : **Nouvelle consultation → mode IA** → consentement (2 cases obligatoires) → enregistrer → terminer → suivre le traitement → relecture. « Le patient refuse » bascule en manuel.
+6. Téléphone comme micro : pendant l’enregistrement, **Utiliser mon téléphone** → scannez le QR (ou `/{locale}/recorder` + code) → enregistrez depuis le téléphone.
+
 ---
 
 ## Sécurité et confidentialité
@@ -258,37 +325,63 @@ Pour recréer les données : `npm run db:seed` (le script est idempotent et reme
 | `NEXTAUTH_URL` | URL publique de l’application |
 | `NEXTAUTH_SECRET` | Secret de signature JWT (`openssl rand -base64 32`) |
 | `NEXT_PUBLIC_APP_URL` | URL publique utilisée côté client |
+| `REDIS_URL` | Optionnel — notifications BullMQ pour la file IA |
+| `INLINE_JOBS` | `1` (défaut sans Redis) : jobs IA exécutés par l’app ; `0` avec un worker dédié |
+| `STT_PROVIDER` | `mock` (défaut) \| `ai-service` \| `openai` |
+| `STT_SERVICE_URL` | URL du service de transcription (`ai-service/`) |
+| `LLM_PROVIDER` | `mock` (défaut) \| `openai` \| `anthropic` \| `ollama` |
+| `LLM_API_KEY` / `LLM_MODEL` | Clé et modèle du fournisseur LLM réel |
+| `AUDIO_RETENTION_DAYS` | Conservation de l’audio après validation (défaut 7) |
+| `TRANSCRIPT_RETENTION_DAYS` | Conservation des transcriptions (défaut 30) |
+| `MAX_AUDIO_MINUTES` | Durée maximale d’enregistrement (défaut 60) |
+| `CRON_SECRET` | Secret du endpoint `/api/cron/purge` (requis en production) |
 
 ---
 
 ## Structure du projet
 
 ```
+ai-service/               micro-service FastAPI de transcription (mock / faster-whisper)
+eval/                     14 consultations fictives + attendu (npm run eval)
 messages/                 ar.json, fr.json (toutes les chaînes UI)
 prisma/
   schema.prisma           User, Patient, Doctor, Consultation, Prescription,
                           Attachment, PatientLinkToken, ClaimCode, Notification, AuditLog,
-                          AccessGrant (portée VITALS/FULL, TTL, révocation)
-  migrations/             migrations initiale et access_grants
-  seed.ts                 données de démonstration
+                          AccessGrant (portée VITALS/FULL, TTL, révocation),
+                          RecordingConsent, Recording, Transcript, AiExtraction,
+                          ProcessingJob, RecorderSession
+  migrations/             init, access_grants, ai_consultation
+  seed.ts                 données de démonstration (dont 2 consultations AI_REVIEW)
 public/                   logo, icônes PWA, manifest
 src/
   app/[locale]/
     (auth)/               connexion, inscription
     patient/              dashboard, consultations, QR (choix de portée), access, claim, profil
-    doctor/               dashboard, consultations (new, edit, detail, finish), patients (dossiers), profil
+    doctor/               dashboard, consultations (new [manuel|IA], edit, detail,
+                          processing, review, finish), patients (dossiers), profil
+    recorder/             appairage téléphone + enregistrement distant (public)
     notifications/        centre de notifications
     dev/ui/               vitrine du design system (hors production)
-  app/api/                auth, patient, doctor, patients, access-grants, notifications, fichiers
+  app/api/                auth, patient, doctor, patients, access-grants, notifications,
+                          fichiers, recorder-sessions, cron/purge ;
+                          doctor/consultations/[id] : consent, recording (start/chunks/finalize),
+                          processing (status/retry/manual), transcript, regenerate, audio,
+                          review, validate, recorder-session
   components/
     ui/                   boutons, badges, champs, dialogue, QR, etc.
     shared/               shell, sidebar, topbar, cartes, listes
     doctor/               formulaire de consultation
+    doctor/ai/            consentement, enregistreur audio, flux IA, traitement, relecture
+    recorder/             appairage + enregistrement téléphone
   lib/                    prisma, auth, tokens, rate-limit, audit, stockage, utils
+  lib/ai/                 types, consentement, pipeline, STT, extraction (prompt/zod/mock/
+                          verify), relecture, sessions enregistreur, rétention
+  lib/jobs/               file PostgreSQL + BullMQ optionnel
   i18n/                   configuration next-intl
   middleware.ts           locale + garde de rôle
-tests/                    tests Vitest (jetons, scan, rate-limit, utils, grants)
-uploads/                  stockage local des pièces jointes (seed/ inclus)
+worker/                   worker IA autonome (npm run worker)
+tests/                    tests Vitest (jetons, scan, rate-limit, utils, grants, IA)
+uploads/                  stockage local (seed/, recordings/)
 ```
 
 ---
@@ -306,6 +399,8 @@ uploads/                  stockage local des pièces jointes (seed/ inclus)
 | `npm run db:seed` | Données de démonstration |
 | `npm run db:studio` | Prisma Studio |
 | `npm test` | Tests Vitest |
+| `npm run worker` | Worker IA (file PostgreSQL + BullMQ si `REDIS_URL`) |
+| `npm run eval` | Évaluation hors ligne du pipeline IA (14 cas fictifs) |
 
 ---
 
@@ -335,7 +430,10 @@ Couverture actuelle :
 - expiration ;
 - limitation de débit (seuil par minute, blocage 15 min après 10 échecs, clés indépendantes) ;
 - masquage des noms, initiales, pluriels, calcul de countdown ;
-- grants d’accès (`AccessGrant`) : portée active non expirée/non révoquée, ordre `LINK_ONLY < VITALS < FULL`.
+- grants d’accès (`AccessGrant`) : portée active non expirée/non révoquée, ordre `LINK_ONLY < VITALS < FULL` ;
+- pipeline IA : consentement (obligatoire/refus/rétention), règles de validation de la relecture, schéma zod, extracteur mock (négations, médicament patient, champs non dits), garde-fous `verifyExtraction` (diagnostic patient-only, négation, preuve manquante, prescription rejetée).
+
+Évaluation dédiée : `npm run eval` (14 consultations fictives fr/ar/darija, 0 champ inventé exigé).
 
 ---
 
@@ -347,6 +445,10 @@ Couverture actuelle :
 - Le QR du patient est régénéré à l’ouverture de la page « Mon QR » : les codes étant hachés, un code existant ne peut pas être réaffiché.
 - Les notifications sont internes à l’application (pas d’e-mail/SMS).
 - L’interface de démonstration `/fr/dev/ui` (et `/ar/dev/ui`) n’est accessible que hors production (`NODE_ENV=development`) ; en production elle redirige vers le tableau de bord.
+- IA : les fournisseurs réels (`openai`, `anthropic`, `ollama`, `ai-service` + faster-whisper) sont implémentés mais non testés faute de clés/GPU en environnement de démo ; les modes `mock` sont deterministes et évalués (`npm run eval`).
+- Attribution des locuteurs : best effort. Sans diarization, les segments réels sont `UNKNOWN` ; le médecin corrige depuis la relecture.
+- L’audio de démonstration seedé est un WAV silencieux (aucun vrai enregistrement n’est fourni).
+- Pas de chiffrement applicatif au repos des fichiers audio en démo (stockage local) : à brancher sur un stockage chiffré en production.
 
 ---
 

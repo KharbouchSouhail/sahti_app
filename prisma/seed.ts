@@ -1,7 +1,11 @@
-import { PrismaClient, Role, ConsultationStatus, LinkMethod, Locale, AccessScope } from '@prisma/client';
+import { PrismaClient, Role, ConsultationStatus, LinkMethod, Locale, AccessScope, ConsentType } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import fs from 'node:fs';
 import path from 'node:path';
+import { MOCK_TRANSCRIPT_SEGMENTS } from '../src/lib/ai/mock-transcript';
+import { mockExtraction } from '../src/lib/ai/extraction/mock';
+import { verifyExtraction } from '../src/lib/ai/extraction/verify';
+import type { AiMeta, TranscriptSegment } from '../src/lib/ai/types';
 
 const prisma = new PrismaClient();
 const PASSWORD = 'Demo1234!';
@@ -52,11 +56,211 @@ function minimalPdf(lines: string[]): Buffer {
   return Buffer.from(pdf, 'latin1');
 }
 
+/** WAV silence (8-bit mono) — audio de démonstration lisible par le navigateur. */
+function silenceWav(seconds: number, sampleRate = 8000): Buffer {
+  const dataSize = Math.max(1, Math.floor(seconds * sampleRate));
+  const buffer = Buffer.alloc(44 + dataSize);
+  buffer.write('RIFF', 0);
+  buffer.writeUInt32LE(36 + dataSize, 4);
+  buffer.write('WAVE', 8);
+  buffer.write('fmt ', 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate, 28);
+  buffer.writeUInt16LE(1, 32);
+  buffer.writeUInt16LE(8, 34);
+  buffer.write('data', 36);
+  buffer.writeUInt32LE(dataSize, 40);
+  buffer.fill(128, 44);
+  return buffer;
+}
+
+/** Transcript de démonstration en darija / français (pièges négation + médicament patient). */
+const DARIJA_TRANSCRIPT_SEGMENTS: TranscriptSegment[] = [
+  { id: 's1', start: 0, end: 8, speaker: 'PATIENT', text: 'سلام دكتور، عندي السخانة و حلقي كايضرني من جوج أيام.', confidence: 0.9 },
+  { id: 's2', start: 8, end: 13, speaker: 'DOCTOR', text: 'واش عندك الكحبة؟', confidence: 0.92 },
+  { id: 's3', start: 13, end: 22, speaker: 'PATIENT', text: 'لا، ما كايناش الكحبة. خديت Doliprane البارح و ما نفعش.', confidence: 0.88 },
+  { id: 's4', start: 22, end: 34, speaker: 'DOCTOR', text: 'ف الفحص: الحرارة 38,5 و اللوزتين حمرين وفيهم قيح.', confidence: 0.91 },
+  { id: 's5', start: 34, end: 42, speaker: 'DOCTOR', text: 'التشخيص هو التهاب اللوزتين الجرثومي.', confidence: 0.93 },
+  { id: 's6', start: 42, end: 55, speaker: 'DOCTOR', text: 'خذ Amoxicilline 1 g، حبة مرتين في اليوم لمدة 6 أيام.', confidence: 0.9 },
+  { id: 's7', start: 55, end: 68, speaker: 'DOCTOR', text: 'و خذ Paracétamol 1 g، حبة مرتين في اليوم إلا كانت السخانة، لمدة 5 أيام.', confidence: 0.87 },
+  { id: 's8', start: 68, end: 80, speaker: 'DOCTOR', text: 'التوصيات: شرب الماء مزيان، الراحة، و إلا بقات السخانة أكثر من 3 أيام خاصك ترجع.', confidence: 0.9 },
+  { id: 's9', start: 80, end: 88, speaker: 'DOCTOR', text: 'ارجع عندي بعد 7 أيام إلا ما تحسنتيش.', confidence: 0.86 },
+  { id: 's10', start: 88, end: 92, speaker: 'UNKNOWN', text: '(صوت غير مفهوم — ضجيج خارجي)', confidence: 0.4 },
+];
+
+async function seedAiReviewConsultation(input: {
+  doctorId: string;
+  doctorUserId: string;
+  segments: TranscriptSegment[];
+  language: string;
+  retention: boolean;
+  consultedAt: Date;
+}) {
+  const verified = verifyExtraction(mockExtraction(input.segments), input.segments);
+  const durationSec = Math.max(...input.segments.map((segment) => segment.end));
+
+  const consultation = await prisma.consultation.create({
+    data: {
+      doctorId: input.doctorId,
+      status: ConsultationStatus.AI_REVIEW,
+      creationMode: 'AI',
+      consultedAt: input.consultedAt,
+      reason: '',
+    },
+  });
+
+  const consentTypes: ConsentType[] = ['AUDIO', 'AI_PROCESSING'];
+  if (input.retention) consentTypes.push('RETENTION');
+  await prisma.recordingConsent.createMany({
+    data: consentTypes.map((type) => ({
+      consultationId: consultation.id,
+      type,
+      granted: true,
+      method: 'DOCTOR_ATTESTATION',
+    })),
+  });
+
+  const recording = await prisma.recording.create({
+    data: {
+      consultationId: consultation.id,
+      status: 'READY',
+      mimeType: 'audio/wav',
+      durationSec,
+      chunkCount: Math.ceil(durationSec / 10),
+      startedAt: input.consultedAt,
+      finishedAt: new Date(input.consultedAt.getTime() + durationSec * 1000),
+      expiresAt: input.retention
+        ? new Date(Date.now() + 7 * 24 * 3600 * 1000)
+        : null,
+    },
+  });
+
+  const wav = silenceWav(durationSec);
+  const dir = path.join(process.cwd(), 'uploads', 'recordings', recording.id);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'audio.wav'), wav);
+  await prisma.recording.update({
+    where: { id: recording.id },
+    data: { storagePath: `${recording.id}/audio.wav`, sizeBytes: wav.length },
+  });
+
+  const transcript = await prisma.transcript.create({
+    data: {
+      consultationId: consultation.id,
+      recordingId: recording.id,
+      language: input.language,
+      text: input.segments.map((segment) => segment.text).join(' '),
+      segments: input.segments as unknown as object[],
+      provider: 'mock',
+      model: 'mock-stt-v1',
+    },
+  });
+
+  await prisma.aiExtraction.create({
+    data: {
+      consultationId: consultation.id,
+      transcriptId: transcript.id,
+      version: 1,
+      provider: 'mock',
+      model: 'mock-rule-based-v1',
+      promptVersion: 'v1',
+      data: verified.data as unknown as object,
+      missingFields: verified.data.missingFields,
+      unverifiedFields: verified.unverifiedFields,
+      warnings: verified.warnings as unknown as object[],
+      status: 'DRAFT',
+    },
+  });
+
+  const aiMeta: AiMeta = {
+    provider: 'mock',
+    model: 'mock-rule-based-v1',
+    promptVersion: 'v1',
+    generatedAt: new Date().toISOString(),
+    editedFields: [],
+    regeneratedSections: [],
+    fieldSources: verified.fieldSources,
+    unverifiedFields: verified.unverifiedFields,
+    warnings: verified.warnings,
+    language: input.language,
+  };
+  await prisma.consultation.update({
+    where: { id: consultation.id },
+    data: { aiMeta: aiMeta as unknown as object },
+  });
+
+  await prisma.processingJob.createMany({
+    data: [
+      {
+        consultationId: consultation.id,
+        type: 'TRANSCRIBE',
+        status: 'SUCCEEDED',
+        attempts: 1,
+        createdAt: input.consultedAt,
+      },
+      {
+        consultationId: consultation.id,
+        type: 'EXTRACT',
+        status: 'SUCCEEDED',
+        attempts: 1,
+        createdAt: input.consultedAt,
+      },
+    ],
+  });
+
+  await prisma.notification.create({
+    data: {
+      userId: input.doctorUserId,
+      title: 'Brouillon IA prêt à relire',
+      body: 'Une consultation enregistrée a été transcrite. Vérifiez chaque information avant validation.',
+      href: `/fr/doctor/consultations/${consultation.id}/review`,
+      createdAt: input.consultedAt,
+    },
+  });
+
+  await prisma.auditLog.createMany({
+    data: [
+      {
+        userId: input.doctorUserId,
+        action: 'CONSENT_GIVEN',
+        entityType: 'Consultation',
+        entityId: consultation.id,
+        createdAt: input.consultedAt,
+      },
+      {
+        userId: input.doctorUserId,
+        action: 'RECORDING_FINALIZED',
+        entityType: 'Consultation',
+        entityId: consultation.id,
+        createdAt: input.consultedAt,
+      },
+      {
+        userId: input.doctorUserId,
+        action: 'AI_DRAFT_READY',
+        entityType: 'Consultation',
+        entityId: consultation.id,
+        createdAt: input.consultedAt,
+      },
+    ],
+  });
+
+  return consultation;
+}
+
 async function main() {
   console.log('Seed Sehhati…');
 
   await prisma.auditLog.deleteMany();
   await prisma.notification.deleteMany();
+  await prisma.recorderSession.deleteMany();
+  await prisma.processingJob.deleteMany();
+  await prisma.aiExtraction.deleteMany();
+  await prisma.transcript.deleteMany();
+  await prisma.recording.deleteMany();
+  await prisma.recordingConsent.deleteMany();
   await prisma.accessGrant.deleteMany();
   await prisma.claimCode.deleteMany();
   await prisma.patientLinkToken.deleteMany();
@@ -386,6 +590,26 @@ async function main() {
       symptoms: 'À compléter…',
     },
   });
+
+  // Deux consultations IA en attente de relecture (transcription + brouillon fictifs)
+  fs.rmSync(path.join(process.cwd(), 'uploads', 'recordings'), { recursive: true, force: true });
+  const aiFr = await seedAiReviewConsultation({
+    doctorId: drAlami.id,
+    doctorUserId: drAlami.userId,
+    segments: MOCK_TRANSCRIPT_SEGMENTS,
+    language: 'fr',
+    retention: true,
+    consultedAt: daysAgo(0, 10),
+  });
+  const aiAr = await seedAiReviewConsultation({
+    doctorId: drAlami.id,
+    doctorUserId: drAlami.userId,
+    segments: DARIJA_TRANSCRIPT_SEGMENTS,
+    language: 'ar',
+    retention: false,
+    consultedAt: daysAgo(0, 11),
+  });
+  console.log(`Consultations IA à relire : ${aiFr.id} (fr), ${aiAr.id} (ar)`);
 
   // Grants d'accès au dossier (consentement patient)
   const hoursFromNow = (h: number) => new Date(Date.now() + h * 3600 * 1000);

@@ -14,6 +14,7 @@ import {
   Pill,
   QrCode,
   ShieldCheck,
+  Sparkles,
   Stethoscope,
   UserRound,
 } from 'lucide-react';
@@ -129,16 +130,36 @@ export default async function DoctorConsultationDetail({
   const primaryHref =
     status === 'DRAFT'
       ? `/${locale}/doctor/consultations/${consultation.id}/edit`
-      : status === 'COMPLETED'
-        ? `/${locale}/doctor/consultations/${consultation.id}/finish`
-        : null;
+      : status === 'RECORDING' || status === 'PROCESSING'
+        ? `/${locale}/doctor/consultations/${consultation.id}/processing`
+        : status === 'AI_REVIEW'
+          ? `/${locale}/doctor/consultations/${consultation.id}/review`
+          : status === 'COMPLETED'
+            ? `/${locale}/doctor/consultations/${consultation.id}/finish`
+            : null;
 
   const statusNote =
     status === 'DRAFT'
       ? { icon: <Clock3 />, text: t('statusDraft'), tone: 'bg-[#FDF4DE] text-[#8A6A18]' }
-      : status === 'COMPLETED'
-        ? { icon: <Link2 />, text: t('statusCompleted'), tone: 'bg-primary-50 text-primary-700' }
-        : { icon: <CheckCircle2 />, text: t('statusLinked'), tone: 'bg-[#E9F6F1] text-success' };
+      : status === 'RECORDING' || status === 'PROCESSING'
+        ? {
+            icon: <Sparkles />,
+            text: t('statusProcessing'),
+            tone: 'bg-primary-50 text-primary-700',
+          }
+        : status === 'AI_REVIEW'
+          ? {
+              icon: <Sparkles />,
+              text: t('statusReview'),
+              tone: 'bg-[#FDF4DE] text-[#8A6A18]',
+            }
+          : status === 'COMPLETED'
+            ? { icon: <Link2 />, text: t('statusCompleted'), tone: 'bg-primary-50 text-primary-700' }
+            : { icon: <CheckCircle2 />, text: t('statusLinked'), tone: 'bg-[#E9F6F1] text-success' };
+
+  const aiMeta = consultation.aiMeta as
+    | { provider?: string; model?: string | null; promptVersion?: string }
+    | null;
 
   return (
     <div className="animate-fade-up">
@@ -152,7 +173,7 @@ export default async function DoctorConsultationDetail({
         </Link>
 
         <div className="flex flex-wrap items-center gap-2">
-          {status !== 'LINKED' ? (
+          {status === 'DRAFT' ? (
             <Link
               href={`/${locale}/doctor/consultations/${consultation.id}/edit`}
               className="btn-outline h-9 px-4 text-xs"
@@ -164,13 +185,20 @@ export default async function DoctorConsultationDetail({
             <Link
               href={primaryHref}
               className={
-                status === 'COMPLETED'
+                status === 'COMPLETED' || status === 'AI_REVIEW'
                   ? 'btn-violet h-9 px-4 text-xs'
                   : 'btn-primary h-9 px-4 text-xs'
               }
             >
               {status === 'COMPLETED' ? <Link2 className="h-3.5 w-3.5" /> : null}
-              {status === 'COMPLETED' ? t('linkNow') : t('edit')}
+              {status === 'AI_REVIEW' ? <Sparkles className="h-3.5 w-3.5" /> : null}
+              {status === 'COMPLETED'
+                ? t('linkNow')
+                : status === 'AI_REVIEW'
+                  ? t('reviewNow')
+                  : status === 'RECORDING' || status === 'PROCESSING'
+                    ? t('followProcessing')
+                    : t('edit')}
               <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" />
             </Link>
           ) : null}
@@ -253,6 +281,18 @@ export default async function DoctorConsultationDetail({
             <p className="text-xs font-semibold">{statusNote.text}</p>
           </div>
         </div>
+
+        {aiMeta && (status === 'COMPLETED' || status === 'LINKED') ? (
+          <div className="no-print mt-2 flex flex-wrap items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-[10px] text-ink-500 ring-1 ring-line/70">
+            <Sparkles className="h-3.5 w-3.5 text-primary-500" />
+            <span className="font-semibold text-ink-700">{t('aiLabel')}</span>
+            <span className="rounded-full bg-primary-50 px-2 py-0.5 font-semibold text-primary-700">
+              {aiMeta.provider ?? 'mock'}
+              {aiMeta.model ? ` · ${aiMeta.model}` : ''}
+              {aiMeta.promptVersion ? ` · ${aiMeta.promptVersion}` : ''}
+            </span>
+          </div>
+        ) : null}
 
         <div className="mt-4 grid gap-4 lg:grid-cols-12">
           <div className="space-y-4 lg:col-span-8">

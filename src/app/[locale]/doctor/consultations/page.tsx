@@ -6,9 +6,11 @@ import {
   ClipboardList,
   FileClock,
   FileText,
+  Mic,
   Paperclip,
   Pill,
   Search,
+  Sparkles,
   Stethoscope,
 } from 'lucide-react';
 import type { Prisma } from '@prisma/client';
@@ -45,8 +47,17 @@ export default async function DoctorConsultationsPage({
   const doctor = data!.user.doctor!;
 
   const query = typeof searchParams.query === 'string' ? searchParams.query.trim() : '';
-  const status = ['DRAFT', 'COMPLETED', 'LINKED'].includes(searchParams.status ?? '')
-    ? (searchParams.status as 'DRAFT' | 'COMPLETED' | 'LINKED')
+  const statuses = [
+    'DRAFT',
+    'RECORDING',
+    'PROCESSING',
+    'AI_REVIEW',
+    'COMPLETED',
+    'LINKED',
+  ] as const;
+  type Status = (typeof statuses)[number];
+  const status = statuses.includes(searchParams.status as Status)
+    ? (searchParams.status as Status)
     : '';
   const page = Math.max(1, Number(searchParams.page ?? 1) || 1);
   const base = `/${locale}/doctor/consultations`;
@@ -93,9 +104,16 @@ export default async function DoctorConsultationsPage({
     }),
   ]);
 
-  const counts = { DRAFT: 0, COMPLETED: 0, LINKED: 0 };
+  const counts: Record<Status, number> = {
+    DRAFT: 0,
+    RECORDING: 0,
+    PROCESSING: 0,
+    AI_REVIEW: 0,
+    COMPLETED: 0,
+    LINKED: 0,
+  };
   for (const row of grouped) counts[row.status] = row._count._all;
-  const allCount = counts.DRAFT + counts.COMPLETED + counts.LINKED;
+  const allCount = Object.values(counts).reduce((sum, value) => sum + value, 0);
 
   const tabs = [
     { label: `${t('filterAll')} · ${allCount}`, href: buildHref({ status: undefined, page: undefined }), active: !status },
@@ -103,6 +121,16 @@ export default async function DoctorConsultationsPage({
       label: `${t('filterDraft')} · ${counts.DRAFT}`,
       href: buildHref({ status: 'DRAFT', page: undefined }),
       active: status === 'DRAFT',
+    },
+    {
+      label: `${t('filterProcessing')} · ${counts.RECORDING + counts.PROCESSING}`,
+      href: buildHref({ status: 'PROCESSING', page: undefined }),
+      active: status === 'PROCESSING' || status === 'RECORDING',
+    },
+    {
+      label: `${t('filterReview')} · ${counts.AI_REVIEW}`,
+      href: buildHref({ status: 'AI_REVIEW', page: undefined }),
+      active: status === 'AI_REVIEW',
     },
     {
       label: `${t('filterCompleted')} · ${counts.COMPLETED}`,
@@ -119,6 +147,18 @@ export default async function DoctorConsultationsPage({
   function actionFor(item: (typeof items)[number]) {
     if (item.status === 'DRAFT') {
       return { href: `/${locale}/doctor/consultations/${item.id}/edit`, label: t('continue') };
+    }
+    if (item.status === 'RECORDING' || item.status === 'PROCESSING') {
+      return {
+        href: `/${locale}/doctor/consultations/${item.id}/processing`,
+        label: t('followProcessing'),
+      };
+    }
+    if (item.status === 'AI_REVIEW') {
+      return {
+        href: `/${locale}/doctor/consultations/${item.id}/review`,
+        label: t('review'),
+      };
     }
     if (item.status === 'COMPLETED') {
       return { href: `/${locale}/doctor/consultations/${item.id}/finish`, label: t('link') };
@@ -260,11 +300,16 @@ export default async function DoctorConsultationsPage({
                       className={
                         item.status === 'COMPLETED'
                           ? 'inline-flex h-9 items-center gap-1.5 rounded-full bg-ink-900 px-4 text-[11px] font-semibold text-white shadow-pill transition-colors hover:bg-ink-700'
-                          : 'inline-flex h-9 items-center gap-1.5 rounded-full bg-primary-50 px-4 text-[11px] font-semibold text-primary-700 transition-colors hover:bg-primary-100'
+                          : item.status === 'AI_REVIEW'
+                            ? 'inline-flex h-9 items-center gap-1.5 rounded-full bg-primary-600 px-4 text-[11px] font-semibold text-white shadow-pill transition-colors hover:bg-primary-700'
+                            : 'inline-flex h-9 items-center gap-1.5 rounded-full bg-primary-50 px-4 text-[11px] font-semibold text-primary-700 transition-colors hover:bg-primary-100'
                       }
                     >
                       {item.status === 'DRAFT' ? <FileClock className="h-3.5 w-3.5" /> : null}
                       {item.status === 'COMPLETED' ? <FileText className="h-3.5 w-3.5" /> : null}
+                      {item.status === 'AI_REVIEW' ? <Sparkles className="h-3.5 w-3.5" /> : null}
+                      {item.status === 'RECORDING' ? <Mic className="h-3.5 w-3.5" /> : null}
+                      {item.status === 'PROCESSING' ? <FileText className="h-3.5 w-3.5" /> : null}
                       {action.label}
                       <ArrowRight className="h-3 w-3 rtl:rotate-180" />
                     </Link>

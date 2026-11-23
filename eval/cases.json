@@ -1,0 +1,272 @@
+[
+  {
+    "id": "fr-angine",
+    "name": "Angine bactérienne — prescriptions explicites, négation, médicament patient",
+    "language": "fr",
+    "segments": [
+      { "id": "s1", "start": 0, "end": 7, "speaker": "PATIENT", "text": "Bonjour docteur, j'ai mal à la gorge depuis trois jours et j'ai un peu de fièvre." },
+      { "id": "s2", "start": 7, "end": 12, "speaker": "DOCTOR", "text": "Bonjour, je vous écoute. Pas de toux sèche ?" },
+      { "id": "s3", "start": 12, "end": 19, "speaker": "PATIENT", "text": "Non, pas de toux. J'ai pris de l'Ibuprofène hier soir, ça n'a rien changé." },
+      { "id": "s4", "start": 19, "end": 30, "speaker": "DOCTOR", "text": "D'accord. À l'examen, la température est à 38,2 degrés et les amygdales sont rouges avec un exsudat." },
+      { "id": "s5", "start": 30, "end": 38, "speaker": "DOCTOR", "text": "Le diagnostic est une angine aiguë probablement bactérienne." },
+      { "id": "s6", "start": 38, "end": 50, "speaker": "DOCTOR", "text": "Je vous prescris de l'Amoxicilline 1 g, un comprimé deux fois par jour pendant six jours." },
+      { "id": "s7", "start": 50, "end": 63, "speaker": "DOCTOR", "text": "Prenez aussi du Paracétamol 1 g, un comprimé trois fois par jour si fièvre, pendant cinq jours." },
+      { "id": "s8", "start": 63, "end": 76, "speaker": "DOCTOR", "text": "En recommandations, buvez beaucoup d'eau, reposez-vous et consultez si la fièvre persiste après trois jours." },
+      { "id": "s9", "start": 76, "end": 82, "speaker": "DOCTOR", "text": "Revoyez-moi dans une semaine si ça ne s'améliore pas." }
+    ],
+    "expect": {
+      "contains": { "diagnosis": "angine", "examination": "38,2", "recommendations": "eau" },
+      "empty": ["treatment"],
+      "prescriptions": ["Amoxicilline", "Paracétamol"],
+      "notPrescribed": ["Ibuprofène"],
+      "symptomsNotContain": ["toux"],
+      "followUpDays": 7,
+      "uncertain": true
+    }
+  },
+  {
+    "id": "fr-negations",
+    "name": "Négations multiples — aucun symptôme inventé",
+    "language": "fr",
+    "segments": [
+      { "id": "s1", "start": 0, "end": 8, "speaker": "PATIENT", "text": "Bonjour, je viens pour un contrôle de routine. Pas de fièvre, pas de toux, aucune douleur." },
+      { "id": "s2", "start": 8, "end": 16, "speaker": "DOCTOR", "text": "Très bien. À l'examen, la tension est à 120/80 et l'auscultation est normale." },
+      { "id": "s3", "start": 16, "end": 24, "speaker": "DOCTOR", "text": "Le diagnostic est un bilan de routine normal." },
+      { "id": "s4", "start": 24, "end": 30, "speaker": "DOCTOR", "text": "Je vous conseille de continuer le sport et de boire régulièrement." }
+    ],
+    "expect": {
+      "contains": { "diagnosis": "bilan de routine" },
+      "empty": ["treatment"],
+      "prescriptions": [],
+      "notPrescribed": [],
+      "symptomsNotContain": ["fièvre", "toux", "douleur"]
+    }
+  },
+  {
+    "id": "fr-patient-drug",
+    "name": "Médicament cité par le patient — jamais prescrit",
+    "language": "fr",
+    "segments": [
+      { "id": "s1", "start": 0, "end": 9, "speaker": "PATIENT", "text": "Je prends de l'Aspirine tous les matins depuis mon opération." },
+      { "id": "s2", "start": 9, "end": 18, "speaker": "DOCTOR", "text": "D'accord. À l'examen, la cicatrice est propre et la tension est normale." },
+      { "id": "s3", "start": 18, "end": 26, "speaker": "DOCTOR", "text": "Le diagnostic est un suivi post-opératoire satisfaisant." },
+      { "id": "s4", "start": 26, "end": 33, "speaker": "DOCTOR", "text": "En recommandations, continuez la marche quotidienne et revenez dans un mois." }
+    ],
+    "expect": {
+      "contains": { "diagnosis": "post-opératoire" },
+      "empty": [],
+      "prescriptions": [],
+      "notPrescribed": ["Aspirine"],
+      "followUpDays": 30
+    }
+  },
+  {
+    "id": "fr-diabete",
+    "name": "Suivi diabète — traitement explicite et suivi dans 3 mois",
+    "language": "fr",
+    "segments": [
+      { "id": "s1", "start": 0, "end": 8, "speaker": "PATIENT", "text": "Je suis fatigué et j'ai très soif depuis deux semaines." },
+      { "id": "s2", "start": 8, "end": 18, "speaker": "DOCTOR", "text": "À l'examen, la tension est à 138/86 et le poids est de 84 kilos." },
+      { "id": "s3", "start": 18, "end": 26, "speaker": "DOCTOR", "text": "Le diagnostic est un diabète type 2 déséquilibré." },
+      { "id": "s4", "start": 26, "end": 34, "speaker": "DOCTOR", "text": "Le traitement est un renforcement du traitement antidiabétique et un régime adapté." },
+      { "id": "s5", "start": 34, "end": 45, "speaker": "DOCTOR", "text": "Je vous prescris de la Metformine 1000 mg, un comprimé deux fois par jour pendant trois mois." },
+      { "id": "s6", "start": 45, "end": 52, "speaker": "DOCTOR", "text": "Prochain contrôle dans trois mois." }
+    ],
+    "expect": {
+      "contains": { "diagnosis": "diabète type 2", "treatment": "renforcement" },
+      "empty": [],
+      "prescriptions": ["Metformine"],
+      "notPrescribed": [],
+      "followUpDays": 90
+    }
+  },
+  {
+    "id": "fr-lombalgie",
+    "name": "Lombalgie — négation « sans irradiation », antalgique explicite",
+    "language": "fr",
+    "segments": [
+      { "id": "s1", "start": 0, "end": 9, "speaker": "PATIENT", "text": "J'ai mal au bas du dos depuis dix jours, sans irradiation dans la jambe." },
+      { "id": "s2", "start": 9, "end": 18, "speaker": "DOCTOR", "text": "À l'examen, le rachis lombaire est souple avec une douleur à la palpation." },
+      { "id": "s3", "start": 18, "end": 25, "speaker": "DOCTOR", "text": "Le diagnostic est une lombalgie mécanique commune." },
+      { "id": "s4", "start": 25, "end": 36, "speaker": "DOCTOR", "text": "Prenez du Paracétamol 1 g, un comprimé trois fois par jour pendant cinq jours." },
+      { "id": "s5", "start": 36, "end": 44, "speaker": "DOCTOR", "text": "Je vous conseille d'éviter le port de charges lourdes." }
+    ],
+    "expect": {
+      "contains": { "diagnosis": "lombalgie" },
+      "empty": [],
+      "prescriptions": ["Paracétamol"],
+      "notPrescribed": [],
+      "symptomsNotContain": ["irradiation"]
+    }
+  },
+  {
+    "id": "fr-minimal",
+    "name": "Échange minimal — tout reste vide, rien n'est inventé",
+    "language": "fr",
+    "segments": [
+      { "id": "s1", "start": 0, "end": 4, "speaker": "PATIENT", "text": "Bonjour docteur." },
+      { "id": "s2", "start": 4, "end": 8, "speaker": "DOCTOR", "text": "Bonjour, asseyez-vous." },
+      { "id": "s3", "start": 8, "end": 14, "speaker": "PATIENT", "text": "Je ne me sens pas très bien en ce moment." }
+    ],
+    "expect": {
+      "contains": {},
+      "empty": ["examination", "diagnosis", "treatment", "recommendations", "followUpDate"],
+      "prescriptions": [],
+      "notPrescribed": []
+    }
+  },
+  {
+    "id": "ar-darija-angine",
+    "name": "Darija / français — angine, négation « ma kaynach », Doliprane patient",
+    "language": "ar",
+    "segments": [
+      { "id": "s1", "start": 0, "end": 8, "speaker": "PATIENT", "text": "سلام دكتور، عندي السخانة و حلقي كايضرني من جوج أيام." },
+      { "id": "s2", "start": 8, "end": 13, "speaker": "DOCTOR", "text": "واش عندك الكحبة؟" },
+      { "id": "s3", "start": 13, "end": 22, "speaker": "PATIENT", "text": "لا، ما كايناش الكحبة. خديت Doliprane البارح و ما نفعش." },
+      { "id": "s4", "start": 22, "end": 34, "speaker": "DOCTOR", "text": "ف الفحص: الحرارة 38,5 و اللوزتين حمرين وفيهم قيح." },
+      { "id": "s5", "start": 34, "end": 42, "speaker": "DOCTOR", "text": "التشخيص هو التهاب اللوزتين الجرثومي." },
+      { "id": "s6", "start": 42, "end": 55, "speaker": "DOCTOR", "text": "خذ Amoxicilline 1 g، حبة مرتين في اليوم لمدة 6 أيام." },
+      { "id": "s7", "start": 55, "end": 68, "speaker": "DOCTOR", "text": "و خذ Paracétamol 1 g، حبة مرتين في اليوم إلا كانت السخانة، لمدة 5 أيام." },
+      { "id": "s8", "start": 68, "end": 80, "speaker": "DOCTOR", "text": "التوصيات: شرب الماء مزيان، الراحة، و إلا بقات السخانة أكثر من 3 أيام خاصك ترجع." },
+      { "id": "s9", "start": 80, "end": 88, "speaker": "DOCTOR", "text": "ارجع عندي بعد 7 أيام إلا ما تحسنتيش." },
+      { "id": "s10", "start": 88, "end": 92, "speaker": "UNKNOWN", "text": "(صوت غير مفهوم — ضجيج خارجي)" }
+    ],
+    "expect": {
+      "contains": { "diagnosis": "التهاب اللوزتين", "examination": "38,5" },
+      "empty": ["treatment"],
+      "prescriptions": ["Amoxicilline", "Paracétamol"],
+      "notPrescribed": ["Doliprane"],
+      "symptomsNotContain": ["الكحبة"],
+      "followUpDays": 7
+    }
+  },
+  {
+    "id": "ar-negation",
+    "name": "Arabe — négation « ma kaynach » sur la fièvre",
+    "language": "ar",
+    "segments": [
+      { "id": "s1", "start": 0, "end": 8, "speaker": "PATIENT", "text": "جيت غير للفحص. ما كاينش السخانة و ما كايناش الكحبة." },
+      { "id": "s2", "start": 8, "end": 16, "speaker": "DOCTOR", "text": "ف الفحص: الضغط 120/80 و الفحص العام عادي." },
+      { "id": "s3", "start": 16, "end": 24, "speaker": "DOCTOR", "text": "التشخيص هو فحص دوري سليم." },
+      { "id": "s4", "start": 24, "end": 30, "speaker": "DOCTOR", "text": "نوصي بالرياضة و شرب الماء." }
+    ],
+    "expect": {
+      "contains": { "diagnosis": "فحص دوري" },
+      "empty": ["treatment"],
+      "prescriptions": [],
+      "notPrescribed": [],
+      "symptomsNotContain": ["السخانة", "الكحبة"]
+    }
+  },
+  {
+    "id": "ar-prescription",
+    "name": "Arabe — prescription explicite avec durée",
+    "language": "ar",
+    "segments": [
+      { "id": "s1", "start": 0, "end": 8, "speaker": "PATIENT", "text": "عندي الحريق ف الحلْق من 3 أيام." },
+      { "id": "s2", "start": 8, "end": 16, "speaker": "DOCTOR", "text": "ف الفحص: اللوزتين حمرين بزاف." },
+      { "id": "s3", "start": 16, "end": 24, "speaker": "DOCTOR", "text": "التشخيص هو التهاب اللوزتين." },
+      { "id": "s4", "start": 24, "end": 36, "speaker": "DOCTOR", "text": "خذ Amoxicilline 500 mg، حبة مرتين في اليوم لمدة 7 أيام." },
+      { "id": "s5", "start": 36, "end": 44, "speaker": "DOCTOR", "text": "ارجع عندي بعد أسبوع." }
+    ],
+    "expect": {
+      "contains": { "diagnosis": "التهاب اللوزتين" },
+      "empty": [],
+      "prescriptions": ["Amoxicilline"],
+      "notPrescribed": [],
+      "followUpDays": 7
+    }
+  },
+  {
+    "id": "mix-darija-fr",
+    "name": "Alternance darija / français — majorité française, langue fr détectée",
+    "language": "fr",
+    "segments": [
+      { "id": "s1", "start": 0, "end": 9, "speaker": "PATIENT", "text": "عندي mal de gorge depuis trois jours، و شوية ديال السخانة." },
+      { "id": "s2", "start": 9, "end": 20, "speaker": "DOCTOR", "text": "D'accord. À l'examen, la température est à 38 degrés et les amygdales sont rouges." },
+      { "id": "s3", "start": 20, "end": 28, "speaker": "DOCTOR", "text": "Le diagnostic est une angine rouge." },
+      { "id": "s4", "start": 28, "end": 38, "speaker": "DOCTOR", "text": "Je vous prescris du Paracétamol 1 g, un comprimé trois fois par jour pendant quatre jours." },
+      { "id": "s5", "start": 38, "end": 46, "speaker": "DOCTOR", "text": "En recommandations, boire beaucoup d'eau et du repos." }
+    ],
+    "expect": {
+      "contains": { "diagnosis": "angine rouge", "examination": "38" },
+      "empty": [],
+      "prescriptions": ["Paracétamol"],
+      "notPrescribed": []
+    }
+  },
+  {
+    "id": "fr-uncertain",
+    "name": "Formulation incertaine — passage signalé, pas de certitude inventée",
+    "language": "fr",
+    "segments": [
+      { "id": "s1", "start": 0, "end": 8, "speaker": "PATIENT", "text": "J'ai de la fièvre et mal à la gorge depuis hier." },
+      { "id": "s2", "start": 8, "end": 16, "speaker": "DOCTOR", "text": "À l'examen, les amygdales sont légèrement rouges." },
+      { "id": "s3", "start": 16, "end": 24, "speaker": "DOCTOR", "text": "Le diagnostic est une angine virale." },
+      { "id": "s4", "start": 24, "end": 32, "speaker": "DOCTOR", "text": "C'est probablement bénin, à confirmer si la fièvre persiste." },
+      { "id": "s5", "start": 32, "end": 40, "speaker": "DOCTOR", "text": "Je vous conseille du repos et de l'hydratation." }
+    ],
+    "expect": {
+      "contains": { "diagnosis": "angine virale" },
+      "empty": [],
+      "prescriptions": [],
+      "notPrescribed": [],
+      "uncertain": true
+    }
+  },
+  {
+    "id": "fr-date-explicit",
+    "name": "Date de suivi explicite (ISO)",
+    "language": "fr",
+    "segments": [
+      { "id": "s1", "start": 0, "end": 8, "speaker": "PATIENT", "text": "Je viens pour le contrôle de ma tension." },
+      { "id": "s2", "start": 8, "end": 16, "speaker": "DOCTOR", "text": "À l'examen, la tension est à 135/85." },
+      { "id": "s3", "start": 16, "end": 24, "speaker": "DOCTOR", "text": "Le diagnostic est une hypertension contrôlée." },
+      { "id": "s4", "start": 24, "end": 32, "speaker": "DOCTOR", "text": "Prochain contrôle le 2026-12-15." }
+    ],
+    "expect": {
+      "contains": { "diagnosis": "hypertension" },
+      "empty": [],
+      "prescriptions": [],
+      "notPrescribed": [],
+      "followUpIso": "2026-12-15"
+    }
+  },
+  {
+    "id": "ar-patient-drug",
+    "name": "Arabe — médicament chronique cité par le patient, non prescrit",
+    "language": "ar",
+    "segments": [
+      { "id": "s1", "start": 0, "end": 9, "speaker": "PATIENT", "text": "كنتناول Aspirine كل صباح من بعد العملية." },
+      { "id": "s2", "start": 9, "end": 18, "speaker": "DOCTOR", "text": "ف الفحص: الجرح نقي و الضغط عادي." },
+      { "id": "s3", "start": 18, "end": 26, "speaker": "DOCTOR", "text": "التشخيص هو متابعة بعد العملية مزيانة." },
+      { "id": "s4", "start": 26, "end": 34, "speaker": "DOCTOR", "text": "نوصي بالمشي يوميا و ارجع بعد شهر." }
+    ],
+    "expect": {
+      "contains": { "diagnosis": "متابعة بعد العملية" },
+      "empty": [],
+      "prescriptions": [],
+      "notPrescribed": ["Aspirine"],
+      "followUpDays": 30
+    }
+  },
+  {
+    "id": "fr-switch-ar",
+    "name": "Consultation française avec une phrase en arabe — langue fr détectée",
+    "language": "fr",
+    "segments": [
+      { "id": "s1", "start": 0, "end": 8, "speaker": "PATIENT", "text": "Bonjour, j'ai des maux de tête répétés depuis une semaine." },
+      { "id": "s2", "start": 8, "end": 14, "speaker": "PATIENT", "text": "شوية ديال الدوخة حتى." },
+      { "id": "s3", "start": 14, "end": 22, "speaker": "DOCTOR", "text": "À l'examen, la tension est à 145/90 et le reste est normal." },
+      { "id": "s4", "start": 22, "end": 30, "speaker": "DOCTOR", "text": "Le diagnostic est une hypertension artérielle de grade 1." },
+      { "id": "s5", "start": 30, "end": 40, "speaker": "DOCTOR", "text": "Je vous prescris du Perindopril 5 mg, un comprimé une fois par jour pendant trois mois." },
+      { "id": "s6", "start": 40, "end": 48, "speaker": "DOCTOR", "text": "En recommandations, réduisez le sel et mesurez la tension matin et soir." }
+    ],
+    "expect": {
+      "contains": { "diagnosis": "hypertension", "examination": "145/90" },
+      "empty": [],
+      "prescriptions": ["Perindopril"],
+      "notPrescribed": []
+    }
+  }
+]

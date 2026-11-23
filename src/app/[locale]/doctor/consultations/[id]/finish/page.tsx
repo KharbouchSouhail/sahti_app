@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { getTranslations, unstable_setRequestLocale } from 'next-intl/server';
 import { ArrowLeft, CheckCircle2, FileText, PencilLine, ShieldCheck } from 'lucide-react';
 import { getSessionUser } from '@/lib/session';
@@ -47,6 +48,13 @@ export default async function FinishConsultationPage({
         />
       </div>
     );
+  }
+
+  if (consultation.status === 'AI_REVIEW') {
+    redirect(`/${locale}/doctor/consultations/${consultation.id}/review`);
+  }
+  if (consultation.status === 'RECORDING' || consultation.status === 'PROCESSING') {
+    redirect(`/${locale}/doctor/consultations/${consultation.id}/processing`);
   }
 
   const backLink = (

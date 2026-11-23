@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ZodError, type ZodSchema } from 'zod';
+import { ZodError, type ZodSchema, type z } from 'zod';
 import type { Role } from '@prisma/client';
 import { auth } from '@/lib/auth';
 
@@ -63,7 +63,10 @@ export async function requireUser(role?: Role) {
   return session;
 }
 
-export async function parseJson<T>(request: Request, schema: ZodSchema<T>): Promise<T> {
+export async function parseJson<S extends ZodSchema>(
+  request: Request,
+  schema: S,
+): Promise<z.output<S>> {
   let body: unknown;
   try {
     body = await request.json();

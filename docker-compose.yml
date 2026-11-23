@@ -27,11 +27,65 @@ services:
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-change-me-with-openssl-rand-base64-32}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      # IA : mock par défaut ; voir .env.example pour les fournisseurs réels.
+      STT_PROVIDER: ${STT_PROVIDER:-mock}
+      STT_SERVICE_URL: ${STT_SERVICE_URL:-http://ai-service:8000}
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      AUDIO_RETENTION_DAYS: ${AUDIO_RETENTION_DAYS:-7}
+      TRANSCRIPT_RETENTION_DAYS: ${TRANSCRIPT_RETENTION_DAYS:-30}
+      MAX_AUDIO_MINUTES: ${MAX_AUDIO_MINUTES:-60}
+      # Avec le profil « ai » (worker dédié), passer INLINE_JOBS=0.
+      INLINE_JOBS: ${INLINE_JOBS:-1}
+      REDIS_URL: ${REDIS_URL:-}
     ports:
       - '3000:3000'
     volumes:
       - sehhati_uploads:/app/uploads
     command: sh -c "npx prisma migrate deploy && npm run start"
+
+  # --- Profil « ai » : docker compose --profile ai up ---
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    profiles: ['ai']
+    ports:
+      - '6379:6379'
+
+  worker:
+    build: .
+    restart: unless-stopped
+    profiles: ['ai']
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://sehhati:sehhati@db:5432/sehhati?schema=public
+      REDIS_URL: redis://redis:6379
+      QUEUE_DRIVER: ${QUEUE_DRIVER:-bullmq}
+      STT_PROVIDER: ${STT_PROVIDER:-mock}
+      STT_SERVICE_URL: ${STT_SERVICE_URL:-http://ai-service:8000}
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      AUDIO_RETENTION_DAYS: ${AUDIO_RETENTION_DAYS:-7}
+      TRANSCRIPT_RETENTION_DAYS: ${TRANSCRIPT_RETENTION_DAYS:-30}
+    volumes:
+      - sehhati_uploads:/app/uploads
+    command: sh -c "npx prisma migrate deploy && npm run worker"
+
+  ai-service:
+    build: ./ai-service
+    restart: unless-stopped
+    profiles: ['ai']
+    environment:
+      STT_MODE: ${STT_MODE:-mock}
+      WHISPER_MODEL: ${WHISPER_MODEL:-large-v3}
+      WHISPER_DEVICE: ${WHISPER_DEVICE:-cpu}
+      WHISPER_COMPUTE: ${WHISPER_COMPUTE:-int8}
+    ports:
+      - '8000:8000'
 
 volumes:
   sehhati_pgdata:

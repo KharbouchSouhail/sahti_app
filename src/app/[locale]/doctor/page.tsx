@@ -11,6 +11,7 @@ import {
   Link2,
   QrCode,
   ScanLine,
+  Sparkles,
   Stethoscope,
 } from 'lucide-react';
 import { getSessionUser } from '@/lib/session';
@@ -45,38 +46,54 @@ export default async function DoctorDashboard({
   endOfDay.setDate(endOfDay.getDate() + 1);
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [today, drafts, awaiting, linked, total, pending, draftList, recent] = await Promise.all([
-    prisma.consultation.count({
-      where: { doctorId: doctor.id, consultedAt: { gte: startOfDay, lt: endOfDay } },
-    }),
-    prisma.consultation.count({ where: { doctorId: doctor.id, status: 'DRAFT' } }),
-    prisma.consultation.count({ where: { doctorId: doctor.id, status: 'COMPLETED' } }),
-    prisma.consultation.count({
-      where: { doctorId: doctor.id, status: 'LINKED', linkedAt: { gte: startOfMonth } },
-    }),
-    prisma.consultation.count({ where: { doctorId: doctor.id } }),
-    prisma.consultation.findMany({
-      where: { doctorId: doctor.id, status: 'COMPLETED' },
-      orderBy: { consultedAt: 'desc' },
-      take: 4,
-    }),
-    prisma.consultation.findMany({
-      where: { doctorId: doctor.id, status: 'DRAFT' },
-      orderBy: { updatedAt: 'desc' },
-      take: 4,
-    }),
-    prisma.consultation.findMany({
-      where: { doctorId: doctor.id },
-      orderBy: { consultedAt: 'desc' },
-      take: 6,
-      include: {
-        patient: { include: { user: { select: { fullName: true } } } },
-      },
-    }),
-  ]);
+  const [today, drafts, awaiting, linked, total, toReview, processing, pending, draftList, reviewList, recent] =
+    await Promise.all([
+      prisma.consultation.count({
+        where: { doctorId: doctor.id, consultedAt: { gte: startOfDay, lt: endOfDay } },
+      }),
+      prisma.consultation.count({ where: { doctorId: doctor.id, status: 'DRAFT' } }),
+      prisma.consultation.count({ where: { doctorId: doctor.id, status: 'COMPLETED' } }),
+      prisma.consultation.count({
+        where: { doctorId: doctor.id, status: 'LINKED', linkedAt: { gte: startOfMonth } },
+      }),
+      prisma.consultation.count({ where: { doctorId: doctor.id } }),
+      prisma.consultation.count({ where: { doctorId: doctor.id, status: 'AI_REVIEW' } }),
+      prisma.consultation.count({
+        where: { doctorId: doctor.id, status: { in: ['RECORDING', 'PROCESSING'] } },
+      }),
+      prisma.consultation.findMany({
+        where: { doctorId: doctor.id, status: 'COMPLETED' },
+        orderBy: { consultedAt: 'desc' },
+        take: 4,
+      }),
+      prisma.consultation.findMany({
+        where: { doctorId: doctor.id, status: 'DRAFT' },
+        orderBy: { updatedAt: 'desc' },
+        take: 4,
+      }),
+      prisma.consultation.findMany({
+        where: { doctorId: doctor.id, status: 'AI_REVIEW' },
+        orderBy: { updatedAt: 'desc' },
+        take: 4,
+      }),
+      prisma.consultation.findMany({
+        where: { doctorId: doctor.id },
+        orderBy: { consultedAt: 'desc' },
+        take: 6,
+        include: {
+          patient: { include: { user: { select: { fullName: true } } } },
+        },
+      }),
+    ]);
 
-  function hrefFor(item: { id: string; status: 'DRAFT' | 'COMPLETED' | 'LINKED' }) {
+  function hrefFor(item: {
+    id: string;
+    status: 'DRAFT' | 'RECORDING' | 'PROCESSING' | 'AI_REVIEW' | 'COMPLETED' | 'LINKED';
+  }) {
     if (item.status === 'DRAFT') return `/${locale}/doctor/consultations/${item.id}/edit`;
+    if (item.status === 'RECORDING' || item.status === 'PROCESSING')
+      return `/${locale}/doctor/consultations/${item.id}/processing`;
+    if (item.status === 'AI_REVIEW') return `/${locale}/doctor/consultations/${item.id}/review`;
     if (item.status === 'COMPLETED') return `/${locale}/doctor/consultations/${item.id}/finish`;
     return `/${locale}/doctor/consultations/${item.id}`;
   }
@@ -137,6 +154,15 @@ export default async function DoctorDashboard({
               <div>
                 <p className="text-xs font-bold leading-none">{awaiting}</p>
                 <p className="mt-0.5 text-[9px] font-medium text-ink-500">{t('awaitingLink')}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 rounded-2xl bg-white/75 px-2.5 py-2 ring-1 ring-white/60">
+              <IconBubble color="violet" size="sm">
+                <Sparkles />
+              </IconBubble>
+              <div>
+                <p className="text-xs font-bold leading-none">{toReview}</p>
+                <p className="mt-0.5 text-[9px] font-medium text-ink-500">{t('toReview')}</p>
               </div>
             </div>
           </div>
@@ -290,6 +316,61 @@ export default async function DoctorDashboard({
           )}
         </section>
       </div>
+
+      {toReview > 0 || processing > 0 ? (
+        <section className="mt-4 rounded-3xl bg-gradient-to-br from-primary-600 to-primary-800 p-5 text-white shadow-soft">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/15">
+                <Sparkles className="h-4 w-4" />
+              </span>
+              <div>
+                <h2 className="text-sm font-bold">{t('reviewTitle')}</h2>
+                <p className="text-[10px] text-white/60">{t('reviewHint')}</p>
+              </div>
+            </div>
+            {processing > 0 ? (
+              <span className="rounded-full bg-white/15 px-3 py-1 text-[10px] font-semibold text-white/80">
+                {t('processingCount', { count: processing })}
+              </span>
+            ) : null}
+          </div>
+
+          {reviewList.length > 0 ? (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {reviewList.map((item) => (
+                <Link
+                  key={item.id}
+                  href={`/${locale}/doctor/consultations/${item.id}/review`}
+                  className="group flex items-center gap-3 rounded-2xl bg-white/10 p-3 ring-1 ring-white/10 transition-colors hover:bg-white/15"
+                >
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/15">
+                    <Sparkles className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-bold">{item.reason || t('reviewUntitled')}</p>
+                    <p className="mt-0.5 text-[10px] text-white/60">
+                      {formatDate(item.updatedAt, locale, {
+                        day: '2-digit',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-bold text-primary-700">
+                    {t('reviewNow')}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 rounded-2xl bg-white/10 px-3 py-2.5 text-[11px] text-white/70">
+              {t('reviewEmpty')}
+            </p>
+          )}
+        </section>
+      ) : null}
 
       <section className="mt-6">
         <div className="mb-3 flex items-center justify-between px-1">

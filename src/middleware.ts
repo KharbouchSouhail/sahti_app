@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { defaultLocale, isAppLocale } from '@/i18n/config';
 
-const PUBLIC_PATHS = ['/login', '/register'];
+const PUBLIC_PATHS = ['/login', '/register', '/recorder'];
 
 function roleHome(locale: string, role?: string) {
   if (role === 'DOCTOR') return `/${locale}/doctor`;
