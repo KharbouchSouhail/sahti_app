@@ -160,7 +160,7 @@ export function ReviewScreen({
 
   function seek(segment: Segment) {
     setActiveSegment(segment.id);
-    if (!audioAvailable || !audioRef.current) return;
+    if (!audioPresent || !audioRef.current) return;
     audioRef.current.currentTime = segment.start;
     void audioRef.current.play().catch(() => undefined);
     setPlaying(true);
@@ -178,6 +178,25 @@ export function ReviewScreen({
     }
   }
 
+  async function deleteAudio() {
+    if (deletingAudio) return;
+    setDeletingAudio(true);
+    try {
+      const result = await apiFetch<{ deleted: boolean }>(
+        `/api/doctor/consultations/${consultationId}/audio`,
+        { method: 'DELETE' },
+      );
+      if (result.deleted) {
+        setAudioPresent(false);
+        toast.success(t('audioDeletedNow'));
+      }
+    } catch {
+      toast.error(t('audioDeleteError'));
+    } finally {
+      setDeletingAudio(false);
+    }
+  }
+
   function showSource(field: ExtractionField) {
     const ids = sources[field] ?? [];
     if (ids.length === 0) return;
@@ -185,7 +204,7 @@ export function ReviewScreen({
     setMobileTab('transcript');
     const first = document.getElementById(`segment-${ids[0]}`);
     first?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    if (audioAvailable && audioRef.current && transcript) {
+    if (audioPresent && audioRef.current && transcript) {
       const segment = transcript.segments.find((item) => item.id === ids[0]);
       if (segment) seek(segment);
     }
@@ -388,7 +407,7 @@ export function ReviewScreen({
         </span>
       </div>
 
-      {audioAvailable ? (
+      {audioPresent ? (
         <div className="mt-3 flex items-center gap-3 rounded-2xl bg-primary-50/70 p-3">
           <button
             type="button"
@@ -413,6 +432,20 @@ export function ReviewScreen({
           <span className="rounded-full bg-white px-2 py-1 text-[9px] font-semibold text-success">
             {t('audioAvailable')}
           </span>
+          <button
+            type="button"
+            onClick={() => void deleteAudio()}
+            disabled={deletingAudio}
+            className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[9px] font-semibold text-danger ring-1 ring-[#FDECEC] hover:bg-[#FDECEC] disabled:opacity-50"
+            title={t('audioDeleteNow')}
+          >
+            {deletingAudio ? (
+              <Loader2 className="h-2.5 w-2.5 animate-spin" />
+            ) : (
+              <Trash2 className="h-2.5 w-2.5" />
+            )}
+            {t('audioDeleteNow')}
+          </button>
           <audio
             ref={audioRef}
             src={`/api/doctor/consultations/${consultationId}/audio`}

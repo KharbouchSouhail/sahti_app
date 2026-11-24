@@ -886,7 +886,10 @@
           "PRESCRIPTION_INCOMPLETE": "Chaque médicament doit avoir dosage, fréquence et durée.",
           "PRESCRIPTION_UNCONFIRMED": "Confirmez chaque prescription ou supprimez la ligne.",
           "INVALID_DATE": "Date de suivi invalide."
-        }
+        },
+        "audioDeleteNow": "Supprimer l’audio",
+        "audioDeletedNow": "Audio supprimé.",
+        "audioDeleteError": "Suppression impossible."
       }
     }
   },

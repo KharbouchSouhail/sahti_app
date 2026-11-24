@@ -886,7 +886,10 @@
           "PRESCRIPTION_INCOMPLETE": "كل دواء يجب أن يتضمن الجرعة والتواتر والمدة.",
           "PRESCRIPTION_UNCONFIRMED": "أكد كل وصفة أو احذف السطر.",
           "INVALID_DATE": "تاريخ المتابعة غير صالح."
-        }
+        },
+        "audioDeleteNow": "حذف الصوت",
+        "audioDeletedNow": "تم حذف الصوت.",
+        "audioDeleteError": "تعذّر الحذف."
       }
     }
   },
